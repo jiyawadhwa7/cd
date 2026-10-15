@@ -71,7 +71,7 @@ if not DATA_PATH.exists():
 
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-                downloaded_file = gdown.download(
+        downloaded_file = gdown.download(
             url,
             str(DATA_PATH),
             quiet=False
@@ -81,6 +81,7 @@ if not DATA_PATH.exists():
             st.error("Dataset download failed. Please check the Google Drive link.")
             st.stop()
 
+df = load_data(str(DATA_PATH))
 df = load_data(str(DATA_PATH))
 
 # --------------------------------------------------
