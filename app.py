@@ -71,11 +71,10 @@ if not DATA_PATH.exists():
 
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        downloaded_file = gdown.download(
+                downloaded_file = gdown.download(
             url,
             str(DATA_PATH),
-            quiet=False,
-            fuzzy=True
+            quiet=False
         )
 
         if downloaded_file is None or not DATA_PATH.exists():
