@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from pathlib import Path
+import gdown
 
 # --------------------------------------------------
 # 1. PAGE SETTINGS
@@ -63,12 +64,9 @@ def load_data(file_path):
     return data
 
 
-import gdown
-
 if not DATA_PATH.exists():
     with st.spinner("Downloading dataset from Google Drive..."):
         url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}"
-
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
         downloaded_file = gdown.download(
@@ -81,7 +79,6 @@ if not DATA_PATH.exists():
             st.error("Dataset download failed. Please check the Google Drive link.")
             st.stop()
 
-df = load_data(str(DATA_PATH))
 df = load_data(str(DATA_PATH))
 
 # --------------------------------------------------
