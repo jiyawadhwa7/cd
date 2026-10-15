@@ -66,18 +66,28 @@ def load_data(file_path):
 
 if not DATA_PATH.exists():
     with st.spinner("Downloading dataset from Google Drive..."):
-        url = f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}"
+        import requests
+
+        url = f"https://drive.google.com/uc?export=download&id={GOOGLE_DRIVE_FILE_ID}"
+
         DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-        downloaded_file = gdown.download(
-            url,
-            str(DATA_PATH),
-            quiet=False
-        )
+        try:
+            response = requests.get(url, timeout=600)
+            response.raise_for_status()
 
-        if downloaded_file is None or not DATA_PATH.exists():
-            st.error("Dataset download failed. Please check the Google Drive link.")
+            if len(response.content) < 1000 or b"<html" in response.content[:500].lower():
+                st.error("Google Drive did not provide the CSV file. Check that the file is shared with Anyone with the link.")
+                st.stop()
+
+            with open(DATA_PATH, "wb") as file:
+                file.write(response.content)
+
+        except Exception as e:
+            st.error(f"Dataset download failed: {e}")
             st.stop()
+
+df = load_data(str(DATA_PATH))
 
 df = load_data(str(DATA_PATH))
 
