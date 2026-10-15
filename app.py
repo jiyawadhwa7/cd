@@ -54,16 +54,14 @@ def download_dataset():
     tmp_path.rename(DATA_PATH)
 
 
-@st.cache_data(show_spinner="Loading transaction dataset...")
+@st.cache_resource(show_spinner="Loading transaction dataset...")
 def load_data(file_path):
+    # Only the columns the dashboard uses, to keep memory low
     columns = [
         "step",
         "type",
         "amount",
         "oldbalanceOrg",
-        "newbalanceOrig",
-        "oldbalanceDest",
-        "newbalanceDest",
         "isFraud",
         "isFlaggedFraud",
     ]
@@ -76,9 +74,6 @@ def load_data(file_path):
             "type": "category",
             "amount": "float64",
             "oldbalanceOrg": "float64",
-            "newbalanceOrig": "float64",
-            "oldbalanceDest": "float64",
-            "newbalanceDest": "float64",
             "isFraud": "int8",
             "isFlaggedFraud": "int8",
         },
