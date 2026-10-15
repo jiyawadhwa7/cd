@@ -29,6 +29,8 @@ st.caption(
 # --------------------------------------------------
 DATA_PATH = Path(__file__).parent / "data" / "paysim.csv"
 
+GOOGLE_DRIVE_FILE_ID = "1JZ0l24jtXO5CkjvRZzaeRnCkmP_7ECS3"
+
 @st.cache_data(show_spinner="Loading transaction dataset...")
 def load_data(file_path):
     columns = [
@@ -62,11 +64,18 @@ def load_data(file_path):
     return data
 
 
+import gdown
+
 if not DATA_PATH.exists():
-    st.error(
-        "Dataset not found. Please place paysim.csv "
-        "inside the project's data folder."
-    )
+    with st.spinner("Downloading dataset from Google Drive..."):
+        gdown.download(
+            f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}",
+            str(DATA_PATH),
+            quiet=False
+        )
+
+if not DATA_PATH.exists():
+    st.error("Dataset download failed. Please check your Google Drive sharing settings.")
     st.stop()
 
 df = load_data(str(DATA_PATH))
