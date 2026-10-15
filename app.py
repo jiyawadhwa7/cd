@@ -1,3 +1,6 @@
+import gc
+
+import numpy as np
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -54,30 +57,36 @@ def download_dataset():
     tmp_path.rename(DATA_PATH)
 
 
-@st.cache_resource(show_spinner="Loading transaction dataset...")
-def load_data(file_path):
-    # Only the columns the dashboard uses, to keep memory low
-    columns = [
-        "step",
-        "type",
-        "amount",
-        "oldbalanceOrg",
-        "isFraud",
-        "isFlaggedFraud",
-    ]
+TYPE_DTYPE = pd.CategoricalDtype(
+    categories=["CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER"]
+)
 
-    return pd.read_csv(
+
+@st.cache_resource(show_spinner="Loading transaction dataset (first load takes about a minute)...")
+def load_data(file_path):
+    """Read the big CSV in chunks with compact dtypes to keep RAM low."""
+    dtypes = {
+        "step": "int16",
+        "type": TYPE_DTYPE,
+        "amount": "float64",
+        "oldbalanceOrg": "float32",
+        "isFraud": "int8",
+        "isFlaggedFraud": "int8",
+    }
+
+    parts = []
+    for chunk in pd.read_csv(
         file_path,
-        usecols=columns,
-        dtype={
-            "step": "int32",
-            "type": "category",
-            "amount": "float64",
-            "oldbalanceOrg": "float64",
-            "isFraud": "int8",
-            "isFlaggedFraud": "int8",
-        },
-    )
+        usecols=list(dtypes),
+        dtype=dtypes,
+        chunksize=500_000,
+    ):
+        parts.append(chunk)
+
+    data = pd.concat(parts, ignore_index=True)
+    del parts
+    gc.collect()
+    return data
 
 
 if not DATA_PATH.exists():
@@ -114,7 +123,7 @@ selected_status = st.sidebar.selectbox(
     options=list(fraud_options.keys()),
 )
 
-max_amount = int(df["amount"].max())
+max_amount = int(np.ceil(df["amount"].max()))
 
 selected_amount = st.sidebar.slider(
     "Transaction Amount Range",
@@ -191,8 +200,11 @@ type_counts = (
 
 # Sample: keep ALL fraud rows (very few) + a sample of legitimate rows,
 # so fraud is properly represented in the detailed charts.
-legit_part = filtered[~fraud_mask]
-legit_part = legit_part.sample(n=min(50000, len(legit_part)), random_state=42)
+legit_positions = np.flatnonzero(~fraud_mask.to_numpy())
+rng = np.random.default_rng(42)
+if len(legit_positions) > 50000:
+    legit_positions = rng.choice(legit_positions, size=50000, replace=False)
+legit_part = filtered.iloc[legit_positions]
 
 chart_sample = pd.concat([fraud_data, legit_part])
 chart_sample["Fraud Status"] = chart_sample["isFraud"].map(
