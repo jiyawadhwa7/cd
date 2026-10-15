@@ -64,15 +64,19 @@ def load_data(file_path):
     return data
 
 
-import gdown
+import requests
 
 if not DATA_PATH.exists():
     with st.spinner("Downloading dataset from Google Drive..."):
-        gdown.download(
-            f"https://drive.google.com/uc?id={GOOGLE_DRIVE_FILE_ID}",
-            str(DATA_PATH),
-            quiet=False
-        )
+        url = f"https://drive.google.com/uc?export=download&id={GOOGLE_DRIVE_FILE_ID}"
+
+        response = requests.get(url, stream=True, timeout=600)
+        response.raise_for_status()
+
+        with open(DATA_PATH, "wb") as file:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    file.write(chunk)
 
 if not DATA_PATH.exists():
     st.error("Dataset download failed. Please check your Google Drive sharing settings.")
