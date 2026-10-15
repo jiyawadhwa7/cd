@@ -29,7 +29,7 @@ st.caption(
 # --------------------------------------------------
 DATA_PATH = Path(__file__).parent / "data" / "paysim.csv"
 
-GOOGLE_DRIVE_FILE_ID = "1JZ0l24jtXO5CkjvRZzaeRnCkmP_7ECS3"
+GOOGLE_DRIVE_FILE_ID = "https://drive.google.com/file/d/1JZ0l24jtXO5CkjvRZzaeRnCkmP_7ECS3/view?usp="
 
 @st.cache_data(show_spinner="Loading transaction dataset...")
 def load_data(file_path):
