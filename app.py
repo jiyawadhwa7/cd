@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
@@ -30,6 +29,31 @@ st.caption(
 DATA_PATH = Path(__file__).parent / "data" / "paysim.csv"
 GOOGLE_DRIVE_FILE_ID = "1JZ0l24jtXO5CkjvRZzaeRnCkmP_7ECS3"
 
+
+def download_dataset():
+    """Download the large CSV from Google Drive using gdown (streams to disk)."""
+    import gdown
+
+    DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = DATA_PATH.with_suffix(".tmp")
+
+    result = gdown.download(
+        id=GOOGLE_DRIVE_FILE_ID,
+        output=str(tmp_path),
+        quiet=False,
+    )
+
+    if result is None or not tmp_path.exists() or tmp_path.stat().st_size < 1_000_000:
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Download failed. Make sure the file is shared as "
+            "'Anyone with the link'."
+        )
+
+    # Rename only after the download fully completed
+    tmp_path.rename(DATA_PATH)
+
+
 @st.cache_data(show_spinner="Loading transaction dataset...")
 def load_data(file_path):
     columns = [
@@ -41,10 +65,10 @@ def load_data(file_path):
         "oldbalanceDest",
         "newbalanceDest",
         "isFraud",
-        "isFlaggedFraud"
+        "isFlaggedFraud",
     ]
 
-    data = pd.read_csv(
+    return pd.read_csv(
         file_path,
         usecols=columns,
         dtype={
@@ -56,37 +80,18 @@ def load_data(file_path):
             "oldbalanceDest": "float64",
             "newbalanceDest": "float64",
             "isFraud": "int8",
-            "isFlaggedFraud": "int8"
-        }
+            "isFlaggedFraud": "int8",
+        },
     )
-
-    return data
 
 
 if not DATA_PATH.exists():
-    with st.spinner("Downloading dataset from Google Drive..."):
-        import requests
-
-        url = f"https://drive.google.com/uc?export=download&id={GOOGLE_DRIVE_FILE_ID}"
-
-        DATA_PATH.parent.mkdir(parents=True, exist_ok=True)
-
+    with st.spinner("Downloading dataset from Google Drive (~500 MB)..."):
         try:
-            response = requests.get(url, timeout=600)
-            response.raise_for_status()
-
-            if len(response.content) < 1000 or b"<html" in response.content[:500].lower():
-                st.error("Google Drive did not provide the CSV file. Check that the file is shared with Anyone with the link.")
-                st.stop()
-
-            with open(DATA_PATH, "wb") as file:
-                file.write(response.content)
-
+            download_dataset()
         except Exception as e:
             st.error(f"Dataset download failed: {e}")
             st.stop()
-
-df = load_data(str(DATA_PATH))
 
 df = load_data(str(DATA_PATH))
 
@@ -95,25 +100,23 @@ df = load_data(str(DATA_PATH))
 # --------------------------------------------------
 st.sidebar.header("Dashboard Filters")
 
-transaction_types = sorted(
-    df["type"].dropna().astype(str).unique().tolist()
-)
+transaction_types = sorted(df["type"].dropna().astype(str).unique().tolist())
 
 selected_types = st.sidebar.multiselect(
     "Transaction Type",
     options=transaction_types,
-    default=transaction_types
+    default=transaction_types,
 )
 
 fraud_options = {
     "All Transactions": None,
     "Legitimate Only": 0,
-    "Fraud Only": 1
+    "Fraud Only": 1,
 }
 
 selected_status = st.sidebar.selectbox(
     "Transaction Status",
-    options=list(fraud_options.keys())
+    options=list(fraud_options.keys()),
 )
 
 max_amount = int(df["amount"].max())
@@ -124,29 +127,23 @@ selected_amount = st.sidebar.slider(
     max_value=max_amount,
     value=(0, max_amount),
     step=max(1, max_amount // 1000),
-    format="%d"
+    format="%d",
 )
 
 # --------------------------------------------------
 # 4. APPLY FILTERS
 # --------------------------------------------------
 filtered = df[
-    df["type"].astype(str).isin(selected_types)
-    & df["amount"].between(
-        selected_amount[0], selected_amount[1]
-    )
+    df["type"].isin(selected_types)
+    & df["amount"].between(selected_amount[0], selected_amount[1])
 ]
 
 fraud_value = fraud_options[selected_status]
 
 if fraud_value is not None:
-    filtered = filtered[
-        filtered["isFraud"] == fraud_value
-    ]
+    filtered = filtered[filtered["isFraud"] == fraud_value]
 
-st.sidebar.caption(
-    f"Showing {len(filtered):,} of {len(df):,} records"
-)
+st.sidebar.caption(f"Showing {len(filtered):,} of {len(df):,} records")
 
 if filtered.empty:
     st.warning(
@@ -160,64 +157,51 @@ if filtered.empty:
 # --------------------------------------------------
 total_records = len(filtered)
 
-fraud_data = filtered[filtered["isFraud"] == 1]
-legitimate_data = filtered[filtered["isFraud"] == 0]
+fraud_mask = filtered["isFraud"] == 1
+fraud_data = filtered[fraud_mask]
 
 total_frauds = len(fraud_data)
-
-fraud_rate = (
-    total_frauds / total_records * 100
-    if total_records else 0
-)
-
+fraud_rate = total_frauds / total_records * 100 if total_records else 0
 average_amount = filtered["amount"].mean()
-
 total_fraud_amount = fraud_data["amount"].sum()
 
 st.subheader("Key Performance Indicators")
 
 k1, k2, k3, k4, k5 = st.columns(5)
 
-k1.metric(
-    "Total Transactions",
-    f"{total_records:,}"
-)
-
-k2.metric(
-    "Fraud Transactions",
-    f"{total_frauds:,}"
-)
-
-k3.metric(
-    "Fraud Rate",
-    f"{fraud_rate:.4f}%"
-)
-
-k4.metric(
-    "Average Transaction",
-    f"{average_amount:,.2f}"
-)
-
-k5.metric(
-    "Total Fraud Amount",
-    f"{total_fraud_amount:,.2f}"
-)
+k1.metric("Total Transactions", f"{total_records:,}")
+k2.metric("Fraud Transactions", f"{total_frauds:,}")
+k3.metric("Fraud Rate", f"{fraud_rate:.4f}%")
+k4.metric("Average Transaction", f"{average_amount:,.2f}")
+k5.metric("Total Fraud Amount", f"{total_fraud_amount:,.2f}")
 
 st.divider()
 
 # --------------------------------------------------
-# 6. PREPARE CHART DATA
+# 6. PREPARE CHART DATA (memory-friendly, no full copy)
 # --------------------------------------------------
-chart_data = filtered.copy()
-
-chart_data["Fraud Status"] = chart_data["isFraud"].map(
-    {0: "Legitimate", 1: "Fraud"}
+status_counts = (
+    filtered["isFraud"]
+    .map({0: "Legitimate", 1: "Fraud"})
+    .value_counts()
+    .rename_axis("Status")
+    .reset_index(name="Transactions")
 )
 
-# Sampling keeps detailed charts responsive on large data.
-chart_sample = chart_data.sample(
-    n=min(50000, len(chart_data)),
-    random_state=42
+type_counts = (
+    filtered.groupby("type", observed=True)
+    .size()
+    .reset_index(name="Transactions")
+)
+
+# Sample: keep ALL fraud rows (very few) + a sample of legitimate rows,
+# so fraud is properly represented in the detailed charts.
+legit_part = filtered[~fraud_mask]
+legit_part = legit_part.sample(n=min(50000, len(legit_part)), random_state=42)
+
+chart_sample = pd.concat([fraud_data, legit_part])
+chart_sample["Fraud Status"] = chart_sample["isFraud"].map(
+    {0: "Legitimate", 1: "Fraud"}
 )
 
 # --------------------------------------------------
@@ -225,33 +209,20 @@ chart_sample = chart_data.sample(
 # --------------------------------------------------
 st.subheader("1. Fraud vs Legitimate Transactions")
 
-status_counts = (
-    chart_data["Fraud Status"]
-    .value_counts()
-    .rename_axis("Status")
-    .reset_index(name="Transactions")
-)
-
 fig1 = px.pie(
     status_counts,
     names="Status",
     values="Transactions",
     hole=0.45,
-    title="Distribution of Transaction Status"
+    title="Distribution of Transaction Status",
 )
 
-st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig1, width="stretch")
 
 # --------------------------------------------------
 # 8. VISUALIZATION 2: TRANSACTION TYPES
 # --------------------------------------------------
 st.subheader("2. Transactions by Type")
-
-type_counts = (
-    chart_data.groupby("type", observed=True)
-    .size()
-    .reset_index(name="Transactions")
-)
 
 fig2 = px.bar(
     type_counts,
@@ -261,11 +232,11 @@ fig2 = px.bar(
     title="Number of Transactions for Each Type",
     labels={
         "type": "Transaction Type",
-        "Transactions": "Number of Transactions"
-    }
+        "Transactions": "Number of Transactions",
+    },
 )
 
-st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, width="stretch")
 
 # --------------------------------------------------
 # 9. VISUALIZATION 3: FRAUD BY TRANSACTION TYPE
@@ -286,11 +257,11 @@ fig3 = px.bar(
     title="Fraud Count Across Transaction Types",
     labels={
         "type": "Transaction Type",
-        "Fraud Transactions": "Fraud Count"
-    }
+        "Fraud Transactions": "Fraud Count",
+    },
 )
 
-st.plotly_chart(fig3, use_container_width=True)
+st.plotly_chart(fig3, width="stretch")
 
 # --------------------------------------------------
 # 10. VISUALIZATION 4: AMOUNT DISTRIBUTION
@@ -304,14 +275,14 @@ fig4 = px.histogram(
     nbins=50,
     barmode="overlay",
     opacity=0.7,
-    title="Transaction Amounts: Fraud vs Legitimate",
+    title="Transaction Amounts: Fraud vs Legitimate (sampled)",
     labels={
         "amount": "Transaction Amount",
-        "count": "Number of Transactions"
-    }
+        "count": "Number of Transactions",
+    },
 )
 
-st.plotly_chart(fig4, use_container_width=True)
+st.plotly_chart(fig4, width="stretch")
 
 # --------------------------------------------------
 # 11. VISUALIZATION 5: SENDER BALANCE COMPARISON
@@ -324,14 +295,14 @@ fig5 = px.box(
     y="oldbalanceOrg",
     color="Fraud Status",
     points=False,
-    title="Original Sender Balance by Transaction Status",
+    title="Original Sender Balance by Transaction Status (sampled)",
     labels={
         "Fraud Status": "Transaction Status",
-        "oldbalanceOrg": "Original Sender Balance"
-    }
+        "oldbalanceOrg": "Original Sender Balance",
+    },
 )
 
-st.plotly_chart(fig5, use_container_width=True)
+st.plotly_chart(fig5, width="stretch")
 
 # --------------------------------------------------
 # 12. VISUALIZATION 6: FRAUD OVER TIME
@@ -353,11 +324,11 @@ fig6 = px.line(
     title="Fraud Count Across Simulation Steps",
     labels={
         "step": "Simulation Step",
-        "Fraud Transactions": "Fraud Count"
-    }
+        "Fraud Transactions": "Fraud Count",
+    },
 )
 
-st.plotly_chart(fig6, use_container_width=True)
+st.plotly_chart(fig6, width="stretch")
 
 # --------------------------------------------------
 # 13. KEY INSIGHTS AND FINDINGS
@@ -370,23 +341,20 @@ st.caption(
     "currently selected in the dashboard filters."
 )
 
-most_common_type = (
-    filtered["type"].value_counts().idxmax()
-    if not filtered.empty else "N/A"
-)
+most_common_type = filtered["type"].value_counts().idxmax()
 
 if total_frauds > 0:
-    most_fraudulent_type = (
-        fraud_data["type"].value_counts().idxmax()
-    )
+    most_fraudulent_type = fraud_data["type"].value_counts().idxmax()
     largest_fraud = fraud_data["amount"].max()
 else:
     most_fraudulent_type = "No fraud records in selection"
     largest_fraud = 0
 
-if not legitimate_data.empty and not fraud_data.empty:
+legit_amounts = filtered.loc[~fraud_mask, "amount"]
+
+if len(legit_amounts) > 0 and total_frauds > 0:
     fraud_median = fraud_data["amount"].median()
-    legitimate_median = legitimate_data["amount"].median()
+    legitimate_median = legit_amounts.median()
 
     if legitimate_median > 0:
         median_comparison = (
@@ -405,46 +373,39 @@ else:
         "to compare their median amounts."
     )
 
-flagged_frauds = int(
-    filtered.loc[
-        filtered["isFraud"] == 1, "isFlaggedFraud"
-    ].sum()
-)
+flagged_frauds = int(fraud_data["isFlaggedFraud"].sum())
 
 insights = [
     (
         "Transaction volume",
-        f"{total_records:,} transactions match the current filters."
+        f"{total_records:,} transactions match the current filters.",
     ),
     (
         "Fraud prevalence",
         f"{total_frauds:,} transactions are fraudulent, "
-        f"representing {fraud_rate:.4f}% of the selected records."
+        f"representing {fraud_rate:.4f}% of the selected records.",
     ),
     (
         "Most common transaction type",
         f"{most_common_type} has the highest transaction count "
-        "in the selected data."
+        "in the selected data.",
     ),
     (
         "Fraud-prone transaction type",
         f"{most_fraudulent_type} has the highest fraud count "
-        "among the selected transaction types."
+        "among the selected transaction types.",
     ),
-    (
-        "Amount comparison",
-        median_comparison
-    ),
+    ("Amount comparison", median_comparison),
     (
         "Flagged fraud records",
         f"{flagged_frauds:,} fraud records in the selection "
-        "have isFlaggedFraud = 1."
+        "have isFlaggedFraud = 1.",
     ),
     (
         "Largest fraud transaction",
         f"The largest selected fraudulent transaction amount "
-        f"is {largest_fraud:,.2f}."
-    )
+        f"is {largest_fraud:,.2f}.",
+    ),
 ]
 
 for heading, detail in insights:
@@ -454,22 +415,17 @@ for heading, detail in insights:
 # 14. DATA PREVIEW AND DOWNLOAD
 # --------------------------------------------------
 with st.expander("View filtered transaction data"):
-    st.dataframe(
-        filtered.head(100),
-        use_container_width=True
-    )
+    st.dataframe(filtered.head(100), width="stretch")
 
-    st.caption(
-        "The preview shows at most 100 rows for performance."
-    )
+    st.caption("The preview shows at most 100 rows for performance.")
 
-    csv_data = filtered.to_csv(index=False).encode("utf-8")
+    csv_data = filtered.head(100_000).to_csv(index=False).encode("utf-8")
 
     st.download_button(
-        label="Download filtered data as CSV",
+        label="Download first 100,000 filtered rows (CSV)",
         data=csv_data,
         file_name="filtered_financial_transactions.csv",
-        mime="text/csv"
+        mime="text/csv",
     )
 
 st.caption(
