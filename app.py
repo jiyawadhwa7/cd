@@ -173,10 +173,10 @@ st.subheader("Key Performance Indicators")
 
 k1, k2, k3, k4, k5 = st.columns(5)
 
-k1.metric("Total Transactions", f"{total_records:,}")
-k2.metric("Fraud Transactions", f"{total_frauds:,}")
+k1.metric("Total Transactions Amount", f"{total_records:,}")
+k2.metric("Fraud Transactions Amount", f"{total_frauds:,}")
 k3.metric("Fraud Rate", f"{fraud_rate:.4f}%")
-k4.metric("Average Transaction", f"{average_amount:,.2f}")
+k4.metric("Average Transactions Amount", f"{average_amount:,.2f}")
 k5.metric("Total Fraud Amount", f"{total_fraud_amount:,.2f}")
 
 st.divider()
